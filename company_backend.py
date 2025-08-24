@@ -14,7 +14,7 @@ except ImportError:
     from langchain.llms.bedrock import Bedrock as ChatBedrock
 
 # Configuration for your models and PDF
-PDF_URL = "https://esdubai.com/wp-content/uploads/documents/es_employee_handbook.pdf"
+PDF_URL = "https://www.upl-ltd.com/images/people/downloads/Leave-Policy-India.pdf"
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
 CHAT_MODEL_ID = "anthropic.claude-v2:1"
 
@@ -52,3 +52,4 @@ def company_rag_response(index, question: str) -> str:
     """Query the index and return the answer from the Claude model."""
     llm = company_llm()
     return index.query(question=question, llm=llm)
+
