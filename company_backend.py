@@ -1,7 +1,18 @@
+"""
+Backend utilities for the Streamlit Q&A bot.
+
+This module loads a PDF, builds a FAISS vector index using Bedrock Titan
+embeddings, and queries it using the Claude v2:1 LLM on Bedrock.  It first
+tries the newer `langchain_community`/`langchain_aws` packages and falls back
+to the older monolithic `langchain` package if necessary.  AWS credentials
+are read from environment variables (e.g. Streamlit Secrets); no profile
+name is required.
+"""
+
 import os
 
+# Try modern package structure first
 try:
-    # Modern package structure (langchain ≥ 0.2.x)
     from langchain_community.document_loaders import PyPDFLoader
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_aws import BedrockEmbeddings, ChatBedrock
@@ -22,7 +33,9 @@ EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
 CHAT_MODEL_ID = "anthropic.claude-v2:1"
 
 def company_pdf():
-    """Load the PDF, split it into chunks, embed them with Titan, and return a FAISS index."""
+    """
+    Load the PDF, split it into chunks, embed them with Titan, and return a FAISS index.
+    """
     loader = PyPDFLoader(PDF_URL)
     splitter = RecursiveCharacterTextSplitter(
         separators=["\n\n", "\n", " ", ""],
@@ -30,13 +43,8 @@ def company_pdf():
         chunk_overlap=10,
     )
 
-    # If AWS_PROFILE is set, pass it to BedrockEmbeddings; otherwise rely on env vars.
-    profile = os.getenv("AWS_PROFILE")
-    embed_kwargs = {"model_id": EMBEDDING_MODEL_ID}
-    if profile:
-        embed_kwargs["credentials_profile_name"] = profile
-
-    embeddings = BedrockEmbeddings(**embed_kwargs)
+    # Let BedrockEmbeddings pick up AWS credentials from the environment.
+    embeddings = BedrockEmbeddings(model_id=EMBEDDING_MODEL_ID)
 
     index_creator = VectorstoreIndexCreator(
         text_splitter=splitter,
@@ -46,21 +54,21 @@ def company_pdf():
     return index_creator.from_loaders([loader])
 
 def company_llm():
-    """Return a Bedrock chat model (Claude v2:1) with preset sampling parameters."""
-    profile = os.getenv("AWS_PROFILE")
-    llm_kwargs = {
-        "model_id": CHAT_MODEL_ID,
-        "model_kwargs": {
+    """
+    Return a Bedrock chat model (Claude v2:1) with preset sampling parameters.
+    """
+    return ChatBedrock(
+        model_id=CHAT_MODEL_ID,
+        model_kwargs={
             "max_tokens_to_sample": 5000,
             "temperature": 0.1,
             "top_p": 0.8,
         },
-    }
-    if profile:
-        llm_kwargs["credentials_profile_name"] = profile
-    return ChatBedrock(**llm_kwargs)
+    )
 
 def company_rag_response(index, question: str) -> str:
-    """Query the FAISS index with the given question and return the LLM’s answer."""
+    """
+    Query the FAISS index with the given question and return the LLM’s answer.
+    """
     llm = company_llm()
     return index.query(question=question, llm=llm)
