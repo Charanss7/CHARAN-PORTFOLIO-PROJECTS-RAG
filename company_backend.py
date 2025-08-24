@@ -1,17 +1,4 @@
-"""
-Backend utilities for the Streamlit Q&A bot.
-
-This module loads a PDF, builds a FAISS vector index using Bedrock Titan
-embeddings, and queries it using the Claude v2:1 LLM on Bedrock.  It first
-tries the newer `langchain_community`/`langchain_aws` packages and falls back
-to the older monolithic `langchain` package if necessary.  AWS credentials
-are read from environment variables (e.g. Streamlit Secrets); no profile
-name is required.
-"""
-
 import os
-
-# Try modern package structure first
 try:
     from langchain_community.document_loaders import PyPDFLoader
     from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -19,7 +6,6 @@ try:
     from langchain_community.vectorstores import FAISS
     from langchain.indexes import VectorstoreIndexCreator
 except ImportError:
-    # Fallback for older versions
     from langchain.document_loaders import PyPDFLoader
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain.embeddings import BedrockEmbeddings
@@ -27,25 +13,21 @@ except ImportError:
     from langchain.indexes import VectorstoreIndexCreator
     from langchain.llms.bedrock import Bedrock as ChatBedrock
 
-# Configuration
-PDF_URL = "https://www.upl-ltd.com/images/people/downloads/Leave-Policy-India.pdf"
+# Configuration for your models and PDF
+PDF_URL = "https://esdubai.com/wp-content/uploads/documents/es_employee_handbook.pdf"
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
 CHAT_MODEL_ID = "anthropic.claude-v2:1"
 
 def company_pdf():
-    """
-    Load the PDF, split it into chunks, embed them with Titan, and return a FAISS index.
-    """
+    """Load the policy PDF, split it into chunks, embed them, and build a FAISS index."""
     loader = PyPDFLoader(PDF_URL)
     splitter = RecursiveCharacterTextSplitter(
         separators=["\n\n", "\n", " ", ""],
         chunk_size=100,
         chunk_overlap=10,
     )
-
-    # Let BedrockEmbeddings pick up AWS credentials from the environment.
+    # Do NOT pass credentials_profile_name; use env vars from Streamlit Secrets
     embeddings = BedrockEmbeddings(model_id=EMBEDDING_MODEL_ID)
-
     index_creator = VectorstoreIndexCreator(
         text_splitter=splitter,
         embedding=embeddings,
@@ -54,12 +36,12 @@ def company_pdf():
     return index_creator.from_loaders([loader])
 
 def company_llm():
-    """
-    Return a Bedrock chat model (Claude v2:1) with preset sampling parameters.
-    """
+    """Return a Claude v2:1 chat model with required Bedrock parameters."""
     return ChatBedrock(
         model_id=CHAT_MODEL_ID,
         model_kwargs={
+            # Anthropic models on Bedrock require this field
+            "anthropic_version": "bedrock-2023-05-31",
             "max_tokens_to_sample": 5000,
             "temperature": 0.1,
             "top_p": 0.8,
@@ -67,9 +49,6 @@ def company_llm():
     )
 
 def company_rag_response(index, question: str) -> str:
-    """
-    Query the FAISS index with the given question and return the LLM’s answer.
-    """
+    """Query the index and return the answer from the Claude model."""
     llm = company_llm()
     return index.query(question=question, llm=llm)
-
